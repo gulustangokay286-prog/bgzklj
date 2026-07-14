@@ -159,6 +159,58 @@ app.post('/api/system/notify-parent', async (req, res) => {
     }
 });
 
+// 4. Broadcast WhatsApp Message Endpoint
+app.post('/api/system/broadcast-whatsapp', async (req, res) => {
+    const { phones, title, message } = req.body;
+    
+    if (!phones || !Array.isArray(phones) || phones.length === 0) {
+        return res.status(400).json({ success: false, error: 'Missing or invalid phones array' });
+    }
+    
+    if (!message) {
+        return res.status(400).json({ success: false, error: 'Missing message' });
+    }
+
+    const fullMessage = title ? `*${title}*\n\n${message}` : message;
+
+    console.log(`[BROADCAST] Starting broadcast to ${phones.length} users...`);
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    // We process them in parallel with Promise.allSettled
+    const sendPromises = phones.map(async (phone) => {
+        let cleanPhone = phone.replace(/[\s\(\)-]/g, '');
+        if (cleanPhone.startsWith('05')) cleanPhone = '+90' + cleanPhone.substring(1);
+        else if (cleanPhone.startsWith('5')) cleanPhone = '+90' + cleanPhone;
+        
+        if (cleanPhone.startsWith('+9050000')) {
+            console.log(`[TEST/DUMMY NUMBER BYPASS] Broadcast skipped for dummy number ${cleanPhone}`);
+            return Promise.resolve();
+        }
+        
+        return client.messages.create({
+            body: fullMessage,
+            from: 'whatsapp:+14155238886',
+            to: `whatsapp:${cleanPhone}`
+        });
+    });
+    
+    const results = await Promise.allSettled(sendPromises);
+    
+    results.forEach(result => {
+        if (result.status === 'fulfilled') successCount++;
+        else failCount++;
+    });
+    
+    console.log(`[BROADCAST] Finished. Success: ${successCount}, Failed: ${failCount}`);
+    
+    return res.status(200).json({ 
+        success: true, 
+        message: `Broadcast finished. Sent: ${successCount}, Failed: ${failCount}` 
+    });
+});
+
 // Start the server
 app.listen(port, () => {
     console.log(`=========================================`);
