@@ -75,12 +75,97 @@ async function runStudentDailyAttendance() {
     }
 }
 
+async function runLunchBreakCheck() {
+    try {
+        // Fetch institution config
+        const configDoc = await getDocs(query(collection(db, 'config')));
+        let lunchBreakEnd = "13:00"; // default
+        let isClosedToday = false;
+        
+        configDoc.forEach(doc => {
+            if (doc.id === 'institution') {
+                const data = doc.data();
+                if (data.lunchBreakEnd) lunchBreakEnd = data.lunchBreakEnd;
+                if (data.closedDays) {
+                    const todayStr = new Date().toLocaleDateString('tr-TR', { weekday: 'long' });
+                    isClosedToday = data.closedDays.some(d => d.toLowerCase() === todayStr.toLowerCase());
+                }
+            }
+        });
+
+        if (isClosedToday) return;
+
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        
+        const [endHour, endMin] = lunchBreakEnd.split(':').map(Number);
+        
+        // Eğer öğle arası bitmemişse kontrol etme
+        if (currentHour < endHour || (currentHour === endHour && currentMinute < endMin)) {
+            return;
+        }
+        
+        // Sadece öğle arası bitiminden sonraki 1 saat içinde 1 kez çalışsın diye basit bir zaman kısıtı
+        // (Veya bunu her 15 dakikada bir çalıştırıp sadece "cooldown'a düşmemiş" olanları tarayabiliriz)
+
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        
+        const gateStatusSnap = await get(ref(rtdb, 'qr_system/gate_status'));
+        let gateStatusMap = {};
+        if (gateStatusSnap.exists()) {
+            gateStatusMap = gateStatusSnap.val();
+        }
+        
+        let cooldownCount = 0;
+        
+        for (const [studentId, gateData] of Object.entries(gateStatusMap)) {
+            if (gateData.date === todayStr && gateData.lastAction === 'exit') {
+                // Öğrenci en son çıkış yapmış.
+                // Firebase'den cooldown durumunu kontrol et
+                const userDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', studentId)));
+                if (!userDoc.empty) {
+                    const userData = userDoc.docs[0].data();
+                    if (userData.role === 'student' && !userData.isCooldown) {
+                        // Cooldown uygula ve admin'e bildirim/log kaydı düş
+                        await db.collection('users').doc(studentId).update({
+                            isCooldown: true,
+                            cooldownReason: "Öğle Arası Dönüş Yapmadı"
+                        });
+                        
+                        await addDoc(collection(db, 'security_logs'), {
+                            title: "Otomatik Turnike Kapatması",
+                            message: `${userData.name || userData.full_name || 'Öğrenci'} öğle arası kurumdan çıktı fakat geri dönmedi. Sistemi durduruldu.`,
+                            type: "warning",
+                            timestamp: new Date()
+                        });
+                        cooldownCount++;
+                    }
+                }
+            }
+        }
+        
+        if (cooldownCount > 0) {
+            console.log(`[CRON-STUDENT] ${cooldownCount} öğrenci öğle arasından dönmediği için cooldown moduna alındı.`);
+        }
+        
+    } catch (err) {
+        console.error("[CRON-LUNCH-CHECK ERROR]:", err);
+    }
+}
+
 // Her gece 23:55'te çalıştır
 const scheduleStudentJob = () => {
     cron.schedule('55 23 * * *', () => {
         runStudentDailyAttendance();
     });
-    console.log("[CRON-STUDENT] Öğrenci Yoklama Zamanlayıcısı Kuruldu (23:55)");
+    
+    // Her 15 dakikada bir öğle arası kontrolünü yap
+    cron.schedule('*/15 * * * *', () => {
+        runLunchBreakCheck();
+    });
+    
+    console.log("[CRON-STUDENT] Öğrenci Yoklama ve Öğle Arası Kontrol Zamanlayıcıları Kuruldu.");
 };
 
-module.exports = { scheduleStudentJob, runStudentDailyAttendance };
+module.exports = { scheduleStudentJob, runStudentDailyAttendance, runLunchBreakCheck };
