@@ -3,9 +3,9 @@ const { getFirestore, collection, getDocs } = require('firebase/firestore');
 
 const firebaseConfig = {
     apiKey: "AIzaSyDhzx2r1Kn0oOm824_61Wag5u1bRYfIjkk",
-    authDomain: "ial-mobil.firebaseapp.com",
-    databaseURL: "https://ial-mobil-default-rtdb.firebaseio.com",
-    projectId: "ial-mobil"
+    authDomain: "bgz-mobil.firebaseapp.com",
+    databaseURL: "https://bgz-mobil-default-rtdb.firebaseio.com",
+    projectId: "bgz-mobil"
 };
 
 const app = initializeApp(firebaseConfig);

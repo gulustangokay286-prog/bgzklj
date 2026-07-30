@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const twilio = require('twilio');
+const { initializeWhatsAppBot, sendWhatsAppMessage } = require('./whatsappService');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -76,57 +77,69 @@ app.post('/api/system/broadcast-whatsapp', async (req, res) => {
         message: `Broadcast accepted. Processing ${phones.length} users in background.`,
     });
 
-    // Arka planda asenkron olarak chunk (parçalara bölerek) gönderimi başlat
+    // Arka planda asenkron olarak yavaş yavaş (Anti-Ban) gönderimi başlat
     (async () => {
         let successCount = 0;
         let failCount = 0;
         const errors = [];
 
-        // Güvenlik ve performans için Twilio isteklerini 50'şerli gruplara bölelim
-        const chunkSize = 50;
-        for (let i = 0; i < phones.length; i += chunkSize) {
-            const chunk = phones.slice(i, i + chunkSize);
+        console.log(`[BROADCAST] Anti-Ban WhatsApp yayını başlıyor... Toplam: ${phones.length} kişi.`);
+
+        for (let i = 0; i < phones.length; i++) {
+            const phone = phones[i];
             
-            const sendPromises = chunk.map(async (phone) => {
-                let cleanPhone = phone.replace(/[\s\(\)-]/g, '');
-                if (cleanPhone.startsWith('05')) cleanPhone = '+90' + cleanPhone.substring(1);
-                else if (cleanPhone.startsWith('5')) cleanPhone = '+90' + cleanPhone;
-                else if (!cleanPhone.startsWith('+')) cleanPhone = '+90' + cleanPhone;
+            // Sahte (Dummy) numaraları atla
+            if (phone.replace(/[\s\(\)-+]/g, '').startsWith('9050000') || phone.replace(/[\s\(\)-+]/g, '').startsWith('50000')) {
+                console.log(`[TEST/DUMMY NUMBER BYPASS] Broadcast skipped for ${phone}`);
+                continue;
+            }
 
-                if (cleanPhone.startsWith('+9050000')) {
-                    console.log(`[TEST/DUMMY NUMBER BYPASS] Broadcast skipped for dummy number ${cleanPhone}`);
-                    return Promise.resolve();
-                }
+            try {
+                await sendWhatsAppMessage(phone, fullMessage);
+                successCount++;
+            } catch (err) {
+                failCount++;
+                errors.push({ phone, error: err.message });
+                console.error(`[BROADCAST] Failed for ${phone}:`, err.message);
+            }
 
-                console.log(`[BROADCAST] Sending to: whatsapp:${cleanPhone}`);
-
-                return client.messages.create({
-                    body: fullMessage,
-                    from: 'whatsapp:+14155238886',
-                    to: `whatsapp:${cleanPhone}`
-                });
-            });
-
-            const results = await Promise.allSettled(sendPromises);
-
-            results.forEach((result, index) => {
-                if (result.status === 'fulfilled') {
-                    successCount++;
-                } else {
-                    failCount++;
-                    errors.push({ phone: chunk[index], error: result.reason?.message || 'Unknown error' });
-                    console.error(`[BROADCAST] Failed for ${chunk[index]}:`, result.reason?.message);
-                }
-            });
-            
-            // Her bir chunk arasında 500ms bekleyerek Twilio Rate Limit (429) sorunlarını önleyelim
-            if (i + chunkSize < phones.length) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+            // ANTI-BAN KORUMASI: Her mesaj arasında 3 ile 7 saniye arası rastgele bekle
+            // Bu sayede WhatsApp sistemi bunu bir "Spam Botu" değil, tek tek kopyala-yapıştır yapan bir "İnsan" zanneder.
+            if (i < phones.length - 1) {
+                const randomDelay = Math.floor(Math.random() * (7000 - 3000 + 1) + 3000);
+                console.log(`⏳ Anti-Ban: Bir sonraki mesaj için ${randomDelay/1000} saniye bekleniyor...`);
+                await new Promise(resolve => setTimeout(resolve, randomDelay));
             }
         }
 
-        console.log(`[BROADCAST] Finished background job. Success: ${successCount}, Failed: ${failCount}`);
+        console.log(`[BROADCAST] Bitti! Başarılı: ${successCount}, Hatalı: ${failCount}`);
     })();
+});
+
+// YENİ %100 BEDAVA VE SINIRSIZ WHATSAPP OTP API'Sİ
+app.post('/api/send-whatsapp-otp', async (req, res) => {
+    const { to, message } = req.body;
+
+    if (!to || !message) {
+        return res.status(400).json({
+            success: false,
+            error: 'Gerekli alanlar eksik: "to" ve "message"'
+        });
+    }
+
+    try {
+        const result = await sendWhatsAppMessage(to, message);
+        return res.status(200).json({
+            success: true,
+            messageId: result.messageId,
+            info: "WhatsApp üzerinden BEDAVA gönderildi!"
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
 app.listen(port, () => {
@@ -141,6 +154,9 @@ app.listen(port, () => {
     
     scheduleDailyJob();
     scheduleStudentJob();
+    
+    // YENİ WHATSAPP BOTUNU BAŞLAT! (Terminalde QR Kod çıkaracak)
+    initializeWhatsAppBot();
 });
 
 module.exports = app;

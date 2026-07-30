@@ -3,10 +3,10 @@ const { getFirestore, collection, getDocs, query, where, addDoc, setDoc, doc } =
 
 const firebaseConfig = {
     apiKey: "AIzaSyDhzx2r1Kn0oOm824_61Wag5u1bRYfIjkk",
-    authDomain: "ial-mobil.firebaseapp.com",
-    databaseURL: "https://ial-mobil-default-rtdb.firebaseio.com",
-    projectId: "ial-mobil",
-    storageBucket: "ial-mobil.firebasestorage.app",
+    authDomain: "bgz-mobil.firebaseapp.com",
+    databaseURL: "https://bgz-mobil-default-rtdb.firebaseio.com",
+    projectId: "bgz-mobil",
+    storageBucket: "bgz-mobil.firebasestorage.app",
     messagingSenderId: "1083444143779",
     appId: "1:1083444143779:web:c0fe00628210fa0a1c4116"
 };
