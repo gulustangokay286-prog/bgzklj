@@ -151,6 +151,10 @@ app.listen(port, () => {
     // Start Cron Jobs
     const { scheduleDailyJob } = require('./cron_attendance');
     const { scheduleStudentJob } = require('./student_attendance_processor');
+    const { startSyncService } = require('./sync_service');
+    const { initializeApp } = require('firebase/app');
+    const fbApp = initializeApp(require('./student_attendance_processor').firebaseConfig || {apiKey: "AIzaSyDhzx2r1Kn0oOm824_61Wag5u1bRYfIjkk",authDomain: "bgz-mobil.firebaseapp.com",databaseURL: "https://bgz-mobil-default-rtdb.firebaseio.com",projectId: "bgz-mobil",storageBucket: "bgz-mobil.firebasestorage.app",messagingSenderId: "1083444143779",appId: "1:1083444143779:web:c0fe00628210fa0a1c4116"}, 'sync-app');
+    startSyncService(fbApp);
     
     scheduleDailyJob();
     scheduleStudentJob();
