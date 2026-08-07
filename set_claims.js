@@ -1,26 +1,48 @@
 const admin = require('firebase-admin');
 
-// ⚠️ IMPORTANT: You must initialize the Firebase Admin SDK with a service account key.
-// Do NOT commit the service account key to the repository.
-// Run this script locally to set the 'admin' custom claim for your superadmin account.
+// Initialize Firebase Admin (Assuming GOOGLE_APPLICATION_CREDENTIALS is set)
+admin.initializeApp();
 
-// const serviceAccount = require('./path-to-your-service-account-key.json');
+const db = admin.firestore();
+const auth = admin.auth();
 
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount)
-// });
+async function syncCustomClaims() {
+    console.log('[SECURITY] Starting JWT Custom Claims Synchronization...');
+    try {
+        const usersSnapshot = await db.collection('users').get();
+        let syncedCount = 0;
 
-async function setAdminClaim(uid) {
-  try {
-    await admin.auth().setCustomUserClaims(uid, { admin: true });
-    console.log(`Successfully set admin claim for user: ${uid}`);
-  } catch (error) {
-    console.error(`Error setting admin claim: ${error}`);
-  }
+        for (const doc of usersSnapshot.docs) {
+            const userData = doc.data();
+            const uid = doc.id;
+            const role = (userData.role || 'student').toLowerCase();
+
+            // Define the custom claims based on the database role
+            const customClaims = {
+                role: role,
+                admin: role === 'admin' || role === 'superadmin' || role === 'patron',
+                superadmin: role === 'superadmin',
+                student: role === 'student',
+                teacher: role === 'teacher' || role === 'öğretmen',
+                parent: role === 'parent' || role === 'veli'
+            };
+
+            try {
+                await auth.setCustomUserClaims(uid, customClaims);
+                console.log(`[SYNC] Synced claims for user ${uid} (Role: ${role})`);
+                syncedCount++;
+            } catch (authErr) {
+                console.error(`[ERROR] Failed to set claims for ${uid}:`, authErr.message);
+            }
+        }
+        
+        console.log(`[SECURITY] Successfully synchronized claims for ${syncedCount} users.`);
+        console.log(`[SECURITY] The backend now exclusively trusts JWT tokens, fully decoupled from database reads.`);
+        process.exit(0);
+    } catch (error) {
+        console.error('[FATAL] Failed to sync claims:', error);
+        process.exit(1);
+    }
 }
 
-// Replace with your actual superadmin UID from Firebase Console
-const SUPERADMIN_UID = "YOUR_SUPERADMIN_UID_HERE";
-
-// UNCOMMENT TO RUN:
-// setAdminClaim(SUPERADMIN_UID);
+syncCustomClaims();

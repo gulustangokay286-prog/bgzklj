@@ -1,0 +1,1 @@
+cmd_Release/security_addon.node := c++ -bundle -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=13.5 -arch arm64 -L./Release -stdlib=libc++  -o Release/security_addon.node Release/obj.target/security_addon/security_addon.o 
