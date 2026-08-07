@@ -8,6 +8,8 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
+        protocolTimeout: 300000,
+        timeout: 60000,
         executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
         args: [
             '--no-sandbox',
@@ -30,15 +32,7 @@ client.on('qr', async (qr) => {
     console.log('======================================================\n');
     qrcode.generate(qr, { small: true });
 
-    // YENİ: Ekrana kod verme (Pairing Code)
-    try {
-        const pairingCode = await client.requestPairingCode('15092068566');
-        console.log('\n🌟 VEYA NUMARA ILE BAGLANMAK ICIN BU KODU GIRIN 🌟');
-        console.log('KOD: ', pairingCode);
-        console.log('Telefonunuzda Bagli Cihazlar -> Cihaz Bagla -> "Bunun yerine telefon numarasiyla bagla" secenegine tiklayin.\n');
-    } catch (err) {
-        console.error('Pairing code hatasi:', err);
-    }
+    // Pairing Code removed due to timeout crashes
 });
 
 client.on('ready', () => {

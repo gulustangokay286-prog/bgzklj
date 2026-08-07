@@ -7,18 +7,16 @@ function startSyncService(app) {
 
     console.log("[SYNC] Firestore -> RTDB Senkronizasyon Servisi Başlatıldı.");
 
-    let isInitialLoad = true;
-    
     // Listen to attendance_logs in Firestore
+    const bootTime = Date.now();
     onSnapshot(collection(db, 'attendance_logs'), (snapshot) => {
-        if (isInitialLoad) {
-            isInitialLoad = false;
-            return; // Ignore existing docs on boot
-        }
-        
         snapshot.docChanges().forEach(async (change) => {
             if (change.type === 'added') {
                 const data = change.doc.data();
+                const logTime = data.timestamp && data.timestamp.toMillis ? data.timestamp.toMillis() : Date.now();
+                if (logTime < bootTime - 60000) {
+                    return; // Ignore old docs
+                }
                 
                 try {
                     const userId = data.studentId;
